@@ -1,0 +1,76 @@
+\documentclass[12pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{enumitem}
+\usepackage[margin=1in]{geometry}
+\usepackage[colorlinks=true]{hyperref}
+\usepackage{url}
+\usepackage{xcolor}
+
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+\title{CS 224W Lecture 1 Notes}
+\author{Matthew Jin}
+\date{September 26, 2023}
+\maketitle
+
+\section*{Types of Graphs}
+
+A \textbf{heterogeneous graphs} $G$ is defined by a 4-tuple $(V, E, R, T)$ where nodes
+$v_i \in V$ with node type $T(v_i)$ and edges $(v_i, r, v_j) \in E$ with
+relation type $r \in R$. Each node and edge also have their own
+attributes/annotations.
+
+\smallskip
+A \textbf{homogeneous graph} is a graph with a single node type and a single
+relation type.
+
+\smallskip
+A \textbf{bipartite graph} is a graph whose nodes can be partitioned into two disjoint
+sets $U$ and $V$ where every edge connects a node in $U$ to a node in $V$.
+
+\section*{Types of Tasks}
+
+\subsection*{Node level}
+
+\textit{Predict some information about a single node in the graph.}
+
+\medskip
+The goal of \textbf{node-level classification} is to characterize the structure
+and position of a node in the network. For example, in a semi-supervised
+learning setting, the user may be given a partially labeled graph and be asked
+to predict the labels of the unlabeled nodes. Properties such as node
+importance, position, and the structure of its subgraph may be relevant
+information for the classification task.
+
+\medskip
+A \textbf{graphlet} is a count vector of rooted subgraphs around a given
+node. A graphlet is calculated from an alphabet of graph connection patterns.
+
+% NOTE: a tikz plot would be helpful here
+
+\subsection*{Edge level}
+
+\textit{Predict some information about the links/relations between nodes.}
+
+\medskip
+The goal of \textbf{link prediction} is to predict new/missing links in a graph.
+Links can be missing at random, or the task can be to predict the links at a
+future time. For example, recommender systems require link predictions to
+generate new recommendations, and link prediction in drug/protein interaction
+graphs can be used to predict potential side effects.
+
+\subsection*{Graph/Subgraph level}
+
+\textit{Predict something about an entire graph or a subsection of it.}
+
+\medskip
+The goal of \textbf{graph-level prediction} is to predict some property of a
+graph or subgraph given the graph structure. For example, Google Maps uses a
+graph of locations (nodes) and roads (edges) to estimate the time a route takes.
+As another example, graphs representing the structure of a molecule can be used
+to predict the properties of the molecule.
+
+\end{document}
