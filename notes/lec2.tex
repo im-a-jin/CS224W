@@ -1,0 +1,256 @@
+\documentclass[12pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{enumitem}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[colorlinks=true]{hyperref}
+\usepackage{pgfplots}
+\usepackage{tikz}
+\usepackage{url}
+\usepackage{xcolor}
+
+\setlength{\parindent}{0pt}
+\pgfplotsset{compat=1.18}
+\pgfplotsset{
+  every axis plot/.append style={line width=1.5pt}
+}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\begin{document}
+
+\title{CS 224W Lecture 2 Notes}
+\author{Matthew Jin}
+\date{September 28, 2023}
+\maketitle
+
+\section*{Graph Representation Learning}
+
+\textit{Automatically learn features that can be applied to downstream
+prediction tasks.}
+
+\medskip
+\textbf{Task}: Map nodes into an embedding space where similarlity of nodes in
+the input network should be close together in the embedding space. These
+embeddings should encode information about the network.
+
+\subsection*{Embedding Nodes}
+
+\textit{Encode nodes so that similarity in the embedding space approximates similary in the graph.}
+
+\medskip
+An \textbf{encoder} maps nodes ($u$, $v$) to $d$-dimensional embeddings
+($\mathbf{z}_v, \mathbf{z}_u$) and a \textbf{decoder} maps the embeddings back
+to the a similarity measure for the original network.
+
+\medskip
+\textbf{Similarity function}: $\text{similarity}(u,v) \approx \mathbf{z}_u^T
+\mathbf{z}_v$
+
+\subsection*{Shallow Encoders}
+A shallow encoder is effectively a lookup table of the node embeddings:
+\[
+  \text{ENC}(v) = \mathbf{z}_v = \mathbf{Z} \cdot v
+\]
+where $Z \in \mathbb{R}^{d \times \mathbb{V}}$ is a matrix where each column is
+a node embedding and $\mathbf{v} \in \mathbb{I}^{|V|}$ is a one-hot encoded
+vector where column $i$ represents the $i$th node.
+
+\medskip
+\textbf{Note}: The approaches discussed in this section are
+unsupervised/self-supervised because they do not use node labels or features. As
+such, these embeddings are \textbf{task independent}.
+
+\subsection*{Random Walks}
+
+\textit{One of many ways to measure similarity between nodes.}
+
+\medskip
+\textbf{Random walks}: Let $\mathbf{z}_u$ be the embedding of node $u$ and
+$P(v\,|\,\mathbf{z}_u)$ be the predicted probability of visiting node $v$ on a
+random walk starting from node $u$. Thus, we want $P(v\,|\,\mathbf{z}_u)
+\approx \mathbf{z}_u^T \mathbf{z}_v$.
+
+\medskip
+\textbf{Idea}: If a random walk starting from node $u$ visits node $v$ with high
+probability, then nodes $u$ and $v$ are ``similar" and thus should have similar
+node embeddings.
+
+\medskip
+\textbf{Note}: Non-linear functions such as \textbf{softmax} and
+\textbf{sigmoid} are used to convert real values into probabilities.
+
+\subsection*{Unsupervised Feature Learning}
+
+\textbf{Learning steps}:
+\begin{enumerate}
+  \item Run fixed-length random walks from node $u$ with strategy $R$.
+  \item For each node $u$, track the nodes visited in the multiset $N_R(u)$.
+    Multiple visits to node $v$ means $v$ appears multiple times in $N_R(u)$.
+  \item Optimize node embeddings to predict the neighbors $N_R(u)$ for each node
+    $u$.
+\end{enumerate}
+
+Define $N_R(u)$ as the neighborhood of $u$ obtained by a random walk strategy
+$R$ which we can use as a metric for node similarity.
+
+Given a graph $G=(V, E)$, we want to learn a mapping $f: u \rightarrow
+\mathbb{R}^d$ so $f(u) = \mathbf{z}_u$.
+
+\smallskip
+\textbf{Log-likelihood Objective}:
+\[
+  \argmax_z \mathcal{L} = \sum_{u \in V} \log P(N_R(u)\,|\,\mathbf{z}_u) \\
+\]
+
+We can parameterize $P(v\,|\,\mathbf{z}_u)$ using softmax which gives us
+$P(v\,|\,\mathbf{z}_u) = \dfrac{\exp(\mathbf{z}_u^T\mathbf{z}_v)}{\sum_{n \in V}
+\exp(\mathbf{z}_u^T \mathbf{z}_n)}$.
+
+\smallskip
+This is equivalent to minimizing the negative loss likelihood which gives us the
+objective function
+\begin{align*}
+  \argmin_z \mathcal{L} &= \sum_{u \in V} \sum_{v \in N_R(u)} -\log
+  P(v\,|\,\mathbf{z}_u) \\
+  &= \sum_{u \in V} \sum_{v \in N_R(u)} -\log \frac{\exp(\mathbf{z}_u^T
+  \mathbf{z}_v)}{\sum_{n \in V} \exp(\mathbf{z}_u^T \mathbf{z}_n)}
+\end{align*}
+
+The loss $\mathcal{L}$ is minized using \textbf{gradient descent} or
+\textbf{stochastic gradient descent}.
+
+\medskip
+\textbf{Problem}: There are two summations over $V$ (one in front and one in the
+demoninator) which makes this loss calculation $O(|V|^2)$. Expensive!
+
+\textbf{Solution}: We need to get rid of the inner summation somehow. This can be
+done with a method known as \textbf{negative sampling}.
+
+\medskip
+\textbf{Negative sampling}: Instead of normalizing across all nodes, we only
+normalize across $k$ random ``negative samples" $n_i$. In practice, this involves
+sampling nodes $n_i ~ P_V$ each with probability proportional to its degree.
+
+% TODO: understand this shit
+
+\smallskip
+Considerations for choosing $k$:
+\begin{enumerate}
+  \item Higher $k$ leads to better estimates
+  \item Higher $k$ corresponds with higher bias on negative events 
+\end{enumerate}
+In practice, $k$ is chosen to be around 5 - 20.
+
+\medskip
+\textbf{Note}: This method is primarily for undirected graphs. Directed graphs
+are more complex and require more advanced methods.
+
+\subsection*{Node2vec}
+
+\textit{A method for biasing random walks.}
+
+\medskip
+\textbf{Key observation}: The notion of neighborhood $N_R(y)$ is informed by the
+random walk. The method is a second order random walk (it remembers its current
+state as well as its previous state)
+
+\medskip
+\textbf{Idea}: Use biased random walks (i.e. BFS vs DFS) to trade off
+between \textbf{local} and \textbf{global} views of the network.
+
+A breadth first search (BFS) provides a micro-view of the neighborhood
+(exploring neighboring nodes first) while a depth first search (DFS) provides a
+macro-view (exploring far down a single path).
+
+\medskip
+\textbf{Interpolating BFS and DFS}: Define a \textbf{return parameter} $p$ and
+an \textbf{in-out parameter} $q$ that act as transition probabilities for the
+biased random walk.
+
+\medskip
+\textbf{Node2vec biasing}: Assume you moved to node $w$ from node $s$. Then, we have
+three cases for the next random walk step from $w$.
+
+\begin{enumerate}
+  \item Move back to node $s$.
+
+    Assign this edge an unnormalized probability of $1/p$.
+  \item Move to a node two hops from $s$ (a node connected to $w$ but not $s$).
+
+    Assign this edge an unnormalized probability of $1/q$.
+  \item Move to a node that is one hop from $s$ (a node that connects to both
+    $s$ and $w$).
+
+    Assign this edge an unnormalized probability of 1.
+\end{enumerate}
+
+The edge values can then be normalized to form the probabilities that inform the
+next step of the biased random walk. A BFS-like walk has a low value of $p$
+while a DFS-like walk will have a low value of $q$.
+
+\medskip
+\textbf{Node2vec algorithm}:
+
+\begin{enumerate}
+  \item Compute edge transition probabilities for $(w,\,\cdot)$ for each edge
+    $(s, w)$.
+  \item Simulate $r$ random walks of length $l$ starting from each node $u$.
+  \item Optimize the node2vec objective using stochastic gradient descent.
+\end{enumerate}
+
+This algorithm runs in linear time and each step can be parallelized.
+
+\subsection*{Embedding Entire Graphs}
+
+\textbf{Approach 1}: Sum the embeddings of every node to form the embedding of
+the entire graph
+
+\medskip
+\textbf{Approach 2}: Create a virtual node that links to all nodes in the
+graph/subgraph and compute the node embedding of the virtual node as the
+graph/subgraph embedding.
+
+\medskip
+\textbf{DiffPool}: Hierarchically cluster nodes in the graphs and sum/avg their
+embeddings as a kind of pooling operation.
+
+\subsection*{Embeddings as Matrix Factorization}
+
+The simplest metric for node embedding is connectivity, where
+$\mathbf{z}_u^T \mathbf{z}_v$ = $A_{u,v}$ where $A$ is the adjacency matrix of
+the graph.
+
+However, since the embeddings are in a lower dimension, it is not possible to
+exactly represent the adjacency matrix. Thus, the goal is to approximate
+the adjacency matrix as best as possible which gives us the following objective
+function: $\min_Z ||A-Z^T Z||_2$.
+
+\medskip
+\textbf{Conclusion}: An inner product decoder for node similarity defined by
+edge connectivity is equivalent to the matrix factorization of the original
+network's adjacency matrix. Other similarity metrics (i.e. DeepWalk, Node2vec)
+can also be formulized as a kind of matrix factorization.
+
+\subsection*{Using Embeddings}
+
+\textbf{Clustering}: Cluster points based on their embeddings $\mathbf{z}_i$ 
+
+\textbf{Node classification}: Predict label of node $i$ based on $\mathbf{z}_i$
+
+\textbf{Link prediction}: Predict edge $(i, j)$ based on some function of
+$(\mathbf{z}_i, \mathbf{z}_j)$ 
+
+\textbf{Graph classification}: Predict label based on graph embedding $\mathbf{z}_G$
+
+\subsection*{Limitations}
+
+\begin{enumerate}
+  \item Cannot obtain embeddings of new nodes (i.e. evolving graphs)
+  \item Cannot capture structural similarity between subgraphs/graphlets
+  \item Cannot utilize node, edge, and graph features
+\end{enumerate}
+
+\end{document}
