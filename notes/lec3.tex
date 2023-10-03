@@ -1,0 +1,193 @@
+\documentclass[12pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{enumitem}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[colorlinks=true]{hyperref}
+\usepackage{pgfplots}
+\usepackage{tikz}
+\usepackage{url}
+\usepackage{xcolor}
+
+\setlength{\parindent}{0pt}
+\pgfplotsset{compat=1.18}
+\pgfplotsset{
+  every axis plot/.append style={line width=1.5pt}
+}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\newcommand{\tbf}{\textbf}
+\newcommand{\tit}{\textit}
+\newcommand{\uline}{\underline}
+\newcommand{\tcR}{\textcolor{red}}
+\newcommand{\tcB}{\textcolor{blue}}
+\newcommand{\mbf}{\mathbf}
+\newcommand{\mcal}{\mathcal}
+\newcommand{\mbb}{\mathbb}
+\newcommand{\mrm}{\mathrm}
+\newcommand{\giv}{\,|\,}
+
+\begin{document}
+
+\title{CS 224W Lecture 3 Notes}
+\author{Matthew Jin}
+\date{October 03, 2023}
+\maketitle
+
+\section*{Basics of Deep Learning}
+
+\textbf{Loss function}:
+\[
+  \min_{\Theta} \mcal{L} \left(\mbf{y}, f_{\Theta}(\mbf{x})\right)
+\]
+where $f_{\Theta}$ can be any kind of neural network (i.e. GNN).
+
+\smallskip
+\tbf{Forward propagation}: Compute $\mcal{L}$ given $\mbf{x}$
+
+\smallskip
+\tbf{Backpropagation}: Compute gradient $\nabla_\Theta \mcal{L}$ using chain
+rule
+
+\smallskip
+\tbf{Optimization}: Use \tbf{stochastic gradient descent} (SGD) to optimize for
+$\Theta$ over many iterations.
+
+\section*{Deep Learning for Graphs}
+
+Let $G=(V,A,X)$ be a graph where $V$ is the vertex set,
+$A$ is the adjacency matrix, and $X \in \mbb{R}^{|V| \times m}$ is a
+matrix of node features. Remember that $N(v)$ is the set of neighbors of node $v
+\in V$.
+
+\medskip
+\tbf{Naive Approach}: Concatenate adjacency matrix $A$ and node features
+$X$ into a single input matrix.
+
+\tbf{Issues}:
+\begin{itemize}
+  \item Parameters scale on the order of $O(|V|)$
+  \item Not applicable to graphs of different sizes
+  \item Sensitive to node ordering
+\end{itemize}
+
+\subsection*{Permutation Invariance}
+
+\tit{The representation of a graph should be the same regardless of node
+ordering in the adjacency and node feature matrices.}
+
+\medskip
+\tbf{Goal}: We want to learn a function $f$ that maps the graph
+$G=(V,A,X)$ to a $d$-dimensional representation vector.
+
+\medskip
+\tbf{Definition}: For any \tcR{graph} function $f: \mbb{R}^{|V| \times m} \times
+\mbb{R}^{|V| \times |V|} \rightarrow \mbb{R}^d$, $f$ is
+\tcR{permutation invariant} if $f(A,X) = f(PAP^T, PX$ for any permutation matrix
+$P$.
+
+\subsection*{Permutation Equivariance}
+
+\tit{Permutation of the input induces an equivalent permutation in the output.}
+
+\medskip
+\tbf{Definition}: For any \tcR{node} function $f: \mbb{R}^{|V| \times m} \times
+\mbb{R}^{|V| \times |V|} \rightarrow \mbb{R}^{|V| \times m}$, $f$ is
+\tcR{permutation equivariant} if $Pf(A,X) = f(PAP^T,PX)$ for any permutation
+matrix $P$.
+
+\section*{Graph Convolutional Networks}
+
+\tit{Neural networks for inputs exhibiting permutation invariance/equivariance.}
+
+\medskip
+\tbf{Key Idea}: Generate node embeddings based on \tcR{local network
+neighborhoods} (i.e. use information from a node's neighbors to build its
+embedding)
+
+\medskip
+\tbf{Layers}: Every node has an embedding at each layer. Layer 0 for node $v$ is
+its input feature $x_v$. The layer $k$ embedding for node $v$ is an aggregate of
+the information from nodes $k$ hops (edges) away from $v$.
+
+\subsection*{Neighborhood Aggregation}
+
+\tit{Define a model that will be used to aggregate information from a node's
+neighbors.}
+
+\medskip
+Average embeddings from neighbors and apply the result to a neural network using
+the formulation below
+\begin{align*}
+  h^0_v &= \mrm{x}_v \\
+  h^{(k+1)}_v &= \sigma\left(W_k \sum_{u \in N(v)} \frac{h^{(k)}_u}{|N(v)|} + B_k
+  h^{(k)}_v\right),\ \forall k \in \{0,\hdots,K-1\} \\
+  \mrm{z}_v &= h^{(K)}_v
+\end{align*}
+where $W_k$ and $B_k$ are \tcR{trainable weight matrices} and $K$ is the total
+number of layers.
+
+\smallskip
+The paramters are defined as follows:
+\begin{itemize}
+  \item $\mrm{x}_v$: node feature vector
+  \item $\mrm{z}_v$: final node embedding
+  \item $h^k_v$: hidden representation of node $v$ at layer $k$.
+  \item $W_k$: weight matrix for neighborhood aggregation
+  \item $B_k$: weight matrix for transforming hidden representation of the node
+    itself
+\end{itemize}
+
+\subsection*{Matrix Formulation}
+
+Let $H^{(k)} = [h^{(k)}_1, \hdots, h^{(k)_{|V|}}]^T$ and $D$ be a diagonal
+matrix where $D_{v,v} = \text{Deg}(v) = |N(v)|$, then
+\[
+  \sum_{u \in N(v)} h^{(k)}_u = A_{(v,:)}H^{(k)}
+\] which gives us
+\[
+  \sum_{u \in N(v)} \frac{h^{(k-1)}_u}{|N(v)|} \Rightarrow H^{(k+1)} =
+  D^{-1}AH^{(k)}
+\]
+
+Then, the update function can be written as 
+\[
+  H^{(k+1)} = \sigma\left(\tilde{A}H^{(k)}W^T_k + H^{(k)}B^T_k\right)
+\]
+where $\tilde{A} = D^{-1}A$.
+
+\medskip
+\tbf{Note}: Not all aggregation functions can be expressed in a simple matrix
+from.
+
+\subsection*{Training}
+
+\tbf{Supervised}: Minimize the loss $\mcal{L}$
+\[
+  \min_{\Theta} \mcal{L}(y, f_{\Theta}(\mrm{z}_v))
+\]
+where $y$ is the node label.
+
+\medskip
+\tbf{Unsupervised}: Use graph structure as supervision. Similar nodes (i.e. as
+defined by random walks) should have similar embeddings. Then, minimize the loss
+\[
+  \mcal{L} = \sum_{\mrm{z}_u, \mrm{z}_v}
+  \mrm{CE}\left(y_{u,v},\mrm{DEC}(\mrm{z}_u,\mrm{z}_v)\right)
+\]
+where $y_{u,v}=1$ when nodes $u$ and $v$ are similar.
+
+\subsection*{Inductive Capability}
+
+Since the aggregation parameters $W_k$ and $B_k$ are shared for all nodes, the
+number of parameters in themodel are sublinear in $|V|$ and can \tcR{generalize
+to new nodes/graphs}.
+
+\section*{GNNs subsume CNNs}
+
+% TODO: not covered in class
+
+\end{document}
