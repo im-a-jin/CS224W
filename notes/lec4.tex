@@ -1,0 +1,336 @@
+\documentclass[12pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[colorlinks=true]{hyperref}
+\usepackage{pgfplots}
+\usepackage{tikz}
+\usepackage{url}
+\usepackage{xcolor}
+
+\setlength{\parindent}{0pt}
+\pgfplotsset{compat=1.18}
+\pgfplotsset{
+  every axis plot/.append style={line width=1.5pt}
+}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\newcommand{\tbf}{\textbf}
+\newcommand{\tit}{\textit}
+\newcommand{\uline}{\underline}
+\newcommand{\tcR}{\textcolor{red}}
+\newcommand{\tcB}{\textcolor{blue}}
+\newcommand{\mbf}{\mathbf}
+\newcommand{\mcal}{\mathcal}
+\newcommand{\mbb}{\mathbb}
+\newcommand{\mrm}{\mathrm}
+\newcommand{\giv}{\,|\,}
+
+\begin{document}
+
+\title{CS 224W Lecture 4 Notes}
+\author{Matthew Jin}
+\date{October 05, 2023}
+\maketitle
+
+\section*{General GNN Framework}
+
+In general, a modern GNN consists of the following 5 compoments:
+\begin{enumerate}
+  \itemsep0em
+  \item \tbf{Message}: What is a message transformation?
+  \item \tbf{Aggregation}: How do we collect the messages from neighbors?
+  \item \tbf{Layer connectivity}: How do we connect different GNN layers?
+  \item \tbf{Graph augmentation}: How do we augment the underlying graph?
+  \item \tbf{Learning objective}: What's the learning objective?
+\end{enumerate}
+
+\subsection*{Single GNN Layer}
+
+\tbf{Idea}: Compress a set of vectors into a single vector via the \tcR{message}
+and \tcR{aggregation} steps.
+
+\medskip
+\tbf{Message computation}: Given input node embeddings $\mbf{h}_v^{(l-a)},
+\mbf{h}_{u \in N(v)}^{(l-1)}$ to the $l$-th GNN layer, each node creates a
+message $\mbf{m}_u^{(l)}$ to be sent to its neighbors.
+\[
+  \mbf{m}_u^{(l)} = f_{\text{MSG}}^{(l)}(\mbf{h}_u^{(l-1)})
+\]
+where $f_{\text{MSG}}$ is some message function (i.e. linear layer with weight
+matrix $W^{(l)}$).
+
+\medskip
+\tbf{Message aggregation}: Once the messages are computed, each node $v$
+aggregates the messages from its neighbors $N(v)$ to compute its $l$-th hidden
+layer representation $\mbf{h}_v^{(l)}$.
+\[
+  \mbf{h}_v^{(l)} = f_{\text{AGG}}^{(l)}(\{\mbf{m}_u^{(l)}, u \in N(v)\})
+\]
+where $f_{\text{AGG}}$ is some aggregation function (i.e. sum, mean, max).
+
+\smallskip
+\tbf{Problem}: Information from node $v$ itself is lost since $\mbf{h}_v^{(l)}$
+does not directly depend on $\mbf{h}_v^{(l-1)}$.
+
+\smallskip
+\tbf{Solution}: Include $\mbf{h}_v^{(l-1)}$ when computing $\mbf{h}_v^{(l)}$.
+
+For node $v$, it's own message can be computed by
+\[
+  \mbf{m}_v^{(l)} = \mbf{B}^{(l)}\mbf{h}_v^{(l-1)}
+\]
+and aggregate the message via concatenation or summation.
+\[
+  \mbf{h}_v^{(l)} = \text{CONCAT}\left(f_{\text{AGG}}^{(l)}(\{\mbf{m}_u^{(l)},
+  u \in N(v)\}),\mbf{m}_v^{(l)}\right)
+\]
+
+\tbf{Note}: Non-linear activation functions such as sigmoid, reLU, etc. can be
+added to both the message or the aggregation steps.
+
+\section*{Classical GNN Layers}
+
+\subsection*{Graph Convolutional Network (GCN)}
+
+\begin{align*}
+  \mbf{h}_v^{(l)} = \sigma\left(\sum_{u \in N(v)} \mbf{W}^{(l)}
+  \frac{\mbf{h}_u^{(l-1)}}{|N(v)|} \right)
+\end{align*}
+where
+\begin{align*}
+  \mbf{m}_u^{(l)} &= \frac{1}{|N(v)|} \mbf{W}^{(l)}\mbf{h}_u^{(l-1)} &&
+  \text{\tcR{message} step} \\
+  \mbf{h}_v^{(l)} &= \sigma\left(\text{Sum}(\{\mbf{m}_u^{(l)},u \in
+  N(v)\})\right) && \text{\tcR{aggregation} step} \\
+\end{align*}
+
+\subsection*{GraphSAGE}
+
+\begin{align*}
+  \mbf{h}_v^{(l)} = \sigma\left(\mbf{W}^{(l)} \cdot
+  \text{Concat}\left(\mbf{h}_v^{(l-1)},f_{\text{AGG}}(\{\mbf{h}_u^{(l-1)},
+  \forall u \in N(v)\})\right) \right)
+\end{align*}
+
+In this case, the \tcR{message} step is computed within $f_{\text{AGG}}$ and the
+\tcR{aggregation} step consists of two steps:
+\begin{enumerate}
+  \itemsep0em
+  \item Aggregate from node neighbors
+    \[
+      \mbf{h}_{N(v)}^{(l)} \leftarrow f_{\text{AGG}}(\{\mbf{h}_u^{(l-1)},
+      \forall u \in N(v)\})
+    \]
+  \item Aggregate over the node itself
+    \[
+      \mbf{h}_v^{(l)} \leftarrow \sigma\left(\mbf{W}^{(l)} \cdot
+      \text{Concat}(\mbf{h}_v^{(l-1)},\mbf{h}_{N(v)}^{(l)})\right)
+    \]
+\end{enumerate}
+
+\tbf{Aggregation functions}: $f_{\text{AGG}}$ could be
+\begin{itemize}
+  \itemsep0em
+  \item \tbf{Mean}:
+  \item \tbf{Pool}:
+  \item \tbf{LSTM}:
+\end{itemize}
+
+\tbf{Optional}: Apply $\ell_2$-norm to $\mbf{h}_v^{(l)}$ at every layer. This
+normalizes the scales of the embedding vectors which may result in performance
+improvement.
+
+\subsection*{Graph Attention Network (GAT)}
+
+\begin{align*}
+  \mbf{h}_v^{(l)} = \sigma\left(\sum_{u \in N(v)} \alpha_{vu}
+  \mbf{W}^{(l)}\mbf{h}_u^{(l-1)}\right)
+\end{align*}
+where $\alpha_{vu}$ are the attention weights between nodes $v$ and $u$. In
+other words, $\alpha_{vu}$ is the weighting factor
+(importance) of node $u$'s message to node $v$.
+
+\smallskip
+In GCN/GraphSAGE, $\alpha_{vu} = \frac{1}{|N(v)|}$ is determined solely by the
+graph structure (node degree).
+
+\subsubsection*{Attention Mechanism} 
+
+\tit{Learn different importance values for different neighbors.}
+
+\medskip
+\tbf{Idea}: Compute embedding $\mbf{h}_v^{(l)}$ of each node in the graph
+following an \tcR{attention strategy}.
+
+\medskip
+For a pair of nodes $u,v$, we want to compute an \tcB{attention coefficient}
+$e_{vu}$ using an \tcR{attention mechanism} $a$.
+\[
+  e_{vu} = a(\mbf{W}^{(l)}\mbf{h}_u^{(l-1)},\mbf{W}^{(l)}\mbf{h}_v^{(l-1)})
+\]
+where $e_{vu}$ indicates the importance of node $u$'s message to node $v$. Then,
+we normalize $e_{vu}$ to calculate the final attention weight $\alpha_{vu}$.
+\[
+  \alpha_{vu} = \frac{e^{e_{vu}}}{\sum_{k \in N(v)} e^{e_{vk}}}
+\]
+A weighted sum based on the final attention weight can then be used to calculate
+the embedding of the node $v$ at layer $l$.
+\[
+  \mbf{h}_v^{(l)} = \sigma(\sum_{u \in N(v)} \alpha
+  \mbf{W}^{(l)}\mbf{h}_u^{(l-1)})
+\]
+The parameters of the \tcR{attention mechanism} $a$ are trained jointly with the
+other parameters of the neural network.
+
+\medskip
+\tbf{Multi-head attention}: \tcR{Multiple attention scores} can be used to
+stable the learning process of the attention mechanism. The outputs are
+aggregated by concatenation or summation to compute the final node embedding.
+\begin{align*}
+  \mbf{h}_v^{(l)}[1] &= \sigma(\sum_{u \in N(v)} \alpha_{vu}^1
+  \mbf{W}^{(l)}\mbf{h}_u^{(l-1)}) \\
+  \mbf{h}_v^{(l)}[2] &= \sigma(\sum_{u \in N(v)} \alpha_{vu}^2
+  \mbf{W}^{(l)}\mbf{h}_u^{(l-1)}) \\
+  \mbf{h}_v^{(l)}[3] &= \sigma(\sum_{u \in N(v)} \alpha_{vu}^3
+  \mbf{W}^{(l)}\mbf{h}_u^{(l-1)}) \\
+  \mbf{h}_v^{(l)} &=
+  f_{\text{AGG}}(\mbf{h}_v^{(l)}[1],\mbf{h}_v^{(l)}[2],\mbf{h}_v^{(l)}[3],)
+\end{align*}
+
+The attention mechanism is computationally efficient (parallelizable), storage
+efficient (on the order of $O(V+E)$), localized (affects local network
+neighborhoods), and has inductive capability (can generalize to new nodes).
+
+\section*{GNN Layers in Practice}
+
+\subsection*{Deep Learning Toolbox}
+
+Classical GNN layers are a great starting point and many modern deep learning
+modules can be incorporated into them. For example,
+\begin{itemize}
+  \itemsep0em
+  \item \tbf{Batch normalization}: Stabilizes neural network training.
+
+    Re-center and re-scale embeddings to 0 mean and unit variance by learning
+    embedding mean $\bm{\beta}$ and embedding variance $\bm{\gamma}$ while
+    training.
+  \item \tbf{Dropout}: Prevents overfitting
+
+    During training, randomly set neurons to zero with probability $p$. Use all
+    neurons during testing. Dropout is usually applied to the \uline{linear
+    layer} in the message function.
+  \item \tbf{Attention/Gating}: controls importance of messages
+\end{itemize}
+
+\subsubsection*{Activation Functions}
+
+\tbf{Rectified linear unit (ReLU)}: $\text{ReLU}(\mbf{x}_i) =
+\max(\mbf{x}_i,0)$. Most commonly used.
+
+\smallskip
+\tbf{Sigmoid}: $\sigma(\mbf{x}_i) = \dfrac{1}{1+e^{-\mbf{x}_i}}$
+
+\smallskip
+\tbf{Parametric ReLU}: $\text{PReLU}(\mbf{x}_i) = \max(\mbf{x}_i,0) +
+a_i\min(\mbf{x}_i,0)$ where $a_i$ is a trainable parameter. Performs better than
+ReLU empirically
+
+\subsection*{Stacking GNN Layers}
+
+\tbf{Standard method}: Stack GNN layers sequentially, so for input $\mbf{x}_v$,
+calculate node embedding $\mbf{h}_v^{(L)}$ after $L$ GNN layers.
+
+\subsubsection*{The Over-smoothing Problem}
+
+\tit{All node embeddings converge to the same value.}
+
+\medskip
+\tbf{Receptive field}: The receptive field of a node is the set of nodes that
+determine its embedding. For a $K$-layer GNN, each node's receptive field is its
+$K$-hop neighborhood. This means that shared neighborhoods grow as the number of
+layers increase as nodes with similar receptive fields will have similar
+embeddings.
+
+\medskip
+\tbf{Solution(s)}:
+\begin{itemize}
+  \itemsep0em
+  \item Be careful when adding GNN layers. Adding more layers is not always
+    helpful in the case of GNNs.
+
+    Analyze the receptive field necessary to solve the problem and set $L$ to be
+    slightly larger than the required receptive field.
+  \item Increase the expressive power within each GNN layer by making each
+    aggregation function a deep neural network.
+  \item Add layers that do not pass messages (i.e. pre/post-process MLP layers)
+
+    Pre-processing layers are important when encoding node features is
+    necessary. Post-processing layers are important when
+    reasoning/transformation over node embeddings are needed.
+\end{itemize}
+
+If you \tit{need} many GNN layers, add skip connections between layers to
+increase the impact of earlier layers on the final node embedding.
+Alternatively, add skip connections directly to the last layer which aggregates
+from the node embeddings of previous layers.
+
+\medskip
+\tbf{Intuition}: Skip connections create a mixture of shallow (utilizing skip)
+GNNs and deep GNNs.
+
+\section*{Graph Manipulation with GNNs}
+
+\tit{When should we break the assumption that the raw input graph is the
+computational graph?}
+
+\medskip
+\tbf{Feature level}: Input graph might lack features which then necessitates
+feature augmentation
+
+\medskip
+\tbf{Structure level}: Input graph may be too sparse which leads to inefficient
+message passing, or it might be too dense in which case message passing is too
+costly. In addition, too large of an input graph might not fit into the GPU's
+VRAM.
+
+\subsection*{Graph Feature Manipulation}
+
+\tbf{Standard problems and approaches}:
+\begin{enumerate}
+  \itemsep0em
+  \item Input grah does not have node features (adj. matrix only).
+
+    Solution: Assign constant values to nodes or assign unique IDs to nodes
+    which can be converted into one-hot vectors. See slide 62 for comparison
+    between the two approaches.
+  \item Certain structures are hard to learn by GNNs (i.e. cycle count).
+
+    Solution: Use desired structure as augmented node features. For cycle count,
+    add a one-hot vector indicating the lenght of the cycle a node is a part of.
+    Other common augmented features include clustering coefficient, PageRank,
+    centrality, etc.
+\end{enumerate}
+
+\subsection*{Graph Structure Manipulation}
+
+\tbf{Standard problems and approaches}:
+\begin{enumerate}
+  \itemsep0em
+  \item Graph is too sparse for effective message passing.
+
+    Solution: Add virtual nodes which will greatly reduce the distance between
+    nodes.
+  \item Graph is too dense/large for efficient message passing.
+
+    Solution: Randomly sample a node's neighborhood for message passing. Same as
+    standard message passing in expectation and greatly reduces computational
+    cost.
+\end{enumerate}
+
+\end{document}
